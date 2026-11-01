@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:5173';
+const login=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
+const cookie=login.headers.get('set-cookie')?.split(';')[0];assert.ok(cookie);
+async function call(path,body){const r=await fetch(base+path,{method:body?'POST':'GET',headers:{cookie,origin:base,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}
+assert.equal((await fetch(base+'/api/data')).status,401);
+const state=await call('/api/data');const watch=state.data.watches.find(w=>w.company==='QA Test Company');assert.ok(watch);
+const job={title:'Senior Software Engineer',location:'Remote',url:'https://example.com/jobs/qa-test',description:'Local QA fixture only.\nBuild useful tools with a thoughtful team.'};
+assert.equal((await call('/api/automation',{watchId:watch.id,jobs:[job]})).data.added,1);
+assert.equal((await call('/api/automation',{watchId:watch.id,jobs:[job]})).data.added,0);
+assert.equal((await call('/api/automation',{watchId:watch.id,jobs:[{...job,title:'Designer',url:'https://example.com/design'}]})).data.added,0);
+let jobs=(await call('/api/data')).data.jobs;const target=jobs.find(j=>j.url===job.url);assert.ok(target);
+assert.equal((await call('/api/data',{action:'status',id:target.id,status:'applied'})).status,200);
+assert.equal((await call('/api/data')).data.jobs.find(j=>j.id===target.id).status,'applied');
+await call('/api/data',{action:'status',id:target.id,status:'dismissed'});
+assert.ok(!(await call('/api/data')).data.jobs.some(j=>j.id===target.id));
+assert.equal((await call('/api/automation',{watchId:watch.id,jobs:[job]})).data.added,0);
+assert.equal((await call('/api/data',{action:'subscribe',endpoint:'https://example.com/evil'})).status,400);
+const key=(await call('/api/data',{action:'pushKey'})).data.key;assert.equal(Buffer.from(key,'base64url').length,65);
+await call('/api/data',{action:'status',id:target.id,status:'new'});
+console.log('PASS: authentication, ingestion, deduplication, title matching, application state, dismissal persistence, push endpoint validation and VAPID public key. Local fixture retained for browser QA.');
