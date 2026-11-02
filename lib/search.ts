@@ -5,6 +5,12 @@ export function publicUrl(value:string) {
   if(u.protocol!=='https:'||u.username||u.password||u.port||!host.includes('.')||/^\d/.test(host)||host.includes(':')||host.endsWith('.local')||host.endsWith('.internal')||host.endsWith('.localhost')||host==='localhost')throw new Error('Unsupported source URL');
   return u;
 }
+export function parseStructuredJson(text:string) {
+  // Some publishers place literal line breaks inside JSON strings.
+  let result='',quoted=false,escaped=false;
+  for(const c of text){if(quoted&&c.charCodeAt(0)<32){result+=JSON.stringify(c).slice(1,-1);continue;}result+=c;if(escaped){escaped=false;continue;}if(c==='\\'&&quoted){escaped=true;continue;}if(c==='"')quoted=!quoted;}
+  return JSON.parse(result);
+}
 export function extractJobs(html:string,source:string,company:string,role:string,now=Date.now()) {
   const jobs:any[]=[];const visit=(value:any)=>{
     if(!value||typeof value!=='object')return;if(Array.isArray(value)){value.forEach(visit);return;}
@@ -17,7 +23,7 @@ export function extractJobs(html:string,source:string,company:string,role:string
     }
     if(value['@graph'])visit(value['@graph']);
   };
-  for(const match of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))try{visit(JSON.parse(match[1]));}catch{}
+  for(const match of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))try{visit(parseStructuredJson(match[1]));}catch{}
   return jobs;
 }
 async function readPage(url:string) {

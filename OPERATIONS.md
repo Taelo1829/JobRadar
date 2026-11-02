@@ -20,7 +20,8 @@ All assets and APIs require the app password on standalone Cloudflare. The Sites
 
 ## Searches and notifications
 
-- Default manual search sites: LinkedIn Jobs, Indeed South Africa, PNet and CareerJunction. Every saved company/role has prefilled links to all four. These links do not import listings, run scheduled searches, or send new-job notifications. Saving a search without an automatic-check board is allowed and explicitly marked as manual.
+- Automatic sources: PNet and CareerJunction public search pages, with up to six detail pages per source per search. Employer/title matching and expiry checks precede import. Source status reports partial coverage and failures.
+- JSearch: configure JSEARCH_API_KEY in Cloudflare with `node scripts/provision-jsearch.mjs`. This reads JSEARCH_API_KEY (or JSearch_API_KEY) from ignored .env.local and sends it via stdin to Wrangler. Indexed listings from LinkedIn, Indeed and other publishers are imported automatically with strict employer/title filtering. One page per watch per scan limits usage (about 90 requests per watch per 30 days, plus manual checks). Index coverage varies and is not a direct exhaustive scan of each publisher. Quota/authentication failures appear in source status. Secrets stay on the server.
 
 - Direct boards: Greenhouse, Lever and Ashby public APIs. Titles must include every word of the requested role.
 - General discovery: Brave Search discovers pages; only JobPosting structured data whose employer matches the requested company is imported. Expired structured postings are excluded. Search coverage is limited by indexing and employer markup. Provider and page failures are surfaced rather than treated as confirmed zero vacancies.

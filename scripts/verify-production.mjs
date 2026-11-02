@@ -12,7 +12,12 @@ let id;
 try {
  const created=await api('/api/data',{action:'watch',company:'Temporary verification '+crypto.randomUUID(),role:'Verification only',board:''});id=created.id;assert.ok(id);
  const state=await api('/api/data');assert.ok(state.watches.some(w=>w.id===id));assert.equal(state.schedule,'active');
- await api('/api/run',{});
+ assert.equal(state.indexedConfigured,true);
+ const scan=await api('/api/run',{});assert.ok(!scan.message.includes('could not complete'),scan.message);
+ const checked=(await api('/api/data')).watches.find(w=>w.id===id);
+ assert.equal(checked.sourceChecks.length,4);
+ console.log('Live source checks:',JSON.stringify(checked.sourceChecks.map(c=>({source:c.source,status:c.status,message:c.message}))));
+ for(const source of ['linkedin','indeed'])assert.equal(checked.sourceChecks.find(c=>c.source===source).status,'partial');
  const status=await api('/api/automation');assert.ok(status.lastRun.completedAt>Date.now()-60000);
 }finally{if(id)await api('/api/data',{action:'remove',id});}
-console.log('PASS: live default links, authentication, search save/read/remove, backend checks and service worker. Temporary search removed.');
+console.log('PASS: live source status, authentication, search save/read/remove, JSearch, backend fan-out and service worker. Temporary search removed.');

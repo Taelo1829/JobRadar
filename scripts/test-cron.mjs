@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 const mf=new Miniflare({unsafeTriggerHandlers:true,modules:[{type:'ESModule',path:path.resolve('dist/server/index.js'),contents:fs.readFileSync('dist/server/index.js','utf8')},...fs.readdirSync('dist/server',{recursive:true}).filter(p=>p.endsWith('.js')&&p!=='index.js').map(p=>({type:'ESModule',path:path.resolve('dist/server',p),contents:fs.readFileSync('dist/server/'+p,'utf8')}))],modulesRoot:'dist/server',compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{STANDALONE:'true',APP_PASSWORD:'test-only',SCHEDULER_ENABLED:'true'},log:new Log(LogLevel.DEBUG)});
 try{
  const db=await mf.getD1Database('DB');
- const migration=fs.readFileSync('drizzle/0000_aberrant_shocker.sql','utf8');
+ const migration=fs.readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort().map(f=>fs.readFileSync('drizzle/'+f,'utf8')).join('--> statement-breakpoint');
  for(const sql of migration.split('--> statement-breakpoint'))await db.prepare(sql.trim()).run();
  const r=await mf.dispatchFetch('http://localhost/cdn-cgi/handler/scheduled?cron=0+6,11,18+*+*+*');
  console.log('Scheduled response:',r.status,await r.text());

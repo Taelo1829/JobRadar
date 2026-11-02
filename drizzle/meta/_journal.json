@@ -8,6 +8,13 @@
       "when": 1793544974238,
       "tag": "0000_aberrant_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793604645364,
+      "tag": "0001_loose_red_ghost",
+      "breakpoints": true
     }
   ]
 }
