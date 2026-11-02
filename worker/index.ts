@@ -12,6 +12,12 @@ const worker = {
   },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     if (env.STANDALONE === 'true') {
+      const publicPwaAssets=['/manifest.webmanifest','/offline.html','/icons/icon-192.png','/icons/icon-512.png','/icons/maskable-512.png','/icons/apple-touch-icon.png'];
+      if(env.ASSETS&&['GET','HEAD'].includes(request.method)&&publicPwaAssets.includes(new URL(request.url).pathname)){
+        const response=await env.ASSETS.fetch(request);const headers=new Headers(response.headers);
+        if(new URL(request.url).pathname==='/manifest.webmanifest'){headers.set('Content-Type','application/manifest+json');headers.set('Cache-Control','no-cache');}
+        return new Response(response.body,{status:response.status,headers});
+      }
       if (!env.APP_PASSWORD) return new Response('The owner must configure APP_PASSWORD before opening Job Radar.', {status:503});
       const authorization=request.headers.get('Authorization')||'';
       let password='';
@@ -23,7 +29,7 @@ const worker = {
       const headers=new Headers(request.headers);
       headers.set('oai-authenticated-user-id','job-radar-owner');headers.set('oai-authenticated-user-email','owner@jobradar.local');
       request=new Request(request,{headers});
-      if(env.ASSETS && ['GET','HEAD'].includes(request.method) && !new URL(request.url).pathname.startsWith('/api/')) {const asset=await env.ASSETS.fetch(request);if(asset.status!==404)return asset;}
+      if(env.ASSETS && ['GET','HEAD'].includes(request.method) && !new URL(request.url).pathname.startsWith('/api/')) {const asset=await env.ASSETS.fetch(request);if(asset.status!==404){if(new URL(request.url).pathname==='/sw.js'){const headers=new Headers(asset.headers);headers.set('Cache-Control','no-cache');headers.set('Service-Worker-Allowed','/');return new Response(asset.body,{status:asset.status,headers});}return asset;}}
     }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
