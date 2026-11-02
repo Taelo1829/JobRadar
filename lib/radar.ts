@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { searchIndexedJobs } from './jsearch';
+import { searchJobs } from './job-provider';
 export function db() { if (!env.DB) throw new Error('Database unavailable'); return env.DB; }
 export async function setting(key: string) { return (await db().prepare('SELECT value FROM settings WHERE key=?').bind(key).first<{value:string}>())?.value; }
 export async function setSetting(key: string,value: string) { await db().prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,value).run(); }
@@ -61,12 +61,11 @@ export async function scan(onlyId?:string):Promise<{newJobs:number;message?:stri
     for(const w of watches.results) {
       let watchCount=0;
       try {
-        if(!env.JSEARCH_API_KEY)throw new Error('Search connection needs setup');
-        const result=await searchIndexedJobs(w.company,w.role,env.JSEARCH_API_KEY);
+        const result=await searchJobs(w.company,w.role,{jsearch:env.JSEARCH_API_KEY,headcount:env.HEADCOUNT_API_KEY},{get:()=>setting('jsearchPausedUntil'),set:value=>setSetting('jsearchPausedUntil',value)});
         for(const job of result.jobs)watchCount+=await insertJob(w,job);
         count+=watchCount;
         await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${watchCount} new jobs found`,w.id).run();
-        await db().prepare('INSERT INTO source_checks(id,watch_id,source,status,message,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,message=excluded.message,checked_at=excluded.checked_at').bind(w.id+':jsearch',w.id,'jsearch','ok',result.message,Date.now()).run();
+        await db().prepare('INSERT INTO source_checks(id,watch_id,source,status,message,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,message=excluded.message,checked_at=excluded.checked_at').bind(w.id+':'+result.provider,w.id,result.provider,'ok',result.message,Date.now()).run();
       } catch {failed++;await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Search could not finish. Please try again later.',w.id).run();}
     }await notifyNew(count); await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:count,failed})); return {newJobs:count,failed,message:`${count} new jobs.${failed?' A search could not finish. Please try again later.':''}`};
   } finally { await setSetting(lockKey,'0'); }

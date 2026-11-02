@@ -19,7 +19,7 @@ try {
  const checked=(await api('/api/data')).watches.find(w=>w.id===id);
  assert.equal(checked.sourceChecks.length,1);
  console.log('Live source checks:',JSON.stringify(checked.sourceChecks.map(c=>({source:c.source,status:c.status,message:c.message}))));
- assert.equal(checked.sourceChecks[0].source,'jsearch');assert.equal(checked.sourceChecks[0].status,'ok');
+ assert.ok(['jsearch','headcount'].includes(checked.sourceChecks[0].source));assert.equal(checked.sourceChecks[0].status,'ok');
  const status=await api('/api/automation');assert.ok(status.lastRun.completedAt>Date.now()-60000);
 }finally{if(id)await api('/api/data',{action:'remove',id});}
 console.log('PASS: live source status, authentication, search save/read/remove, JSearch, immediate first check on save and service worker. Temporary search removed.');

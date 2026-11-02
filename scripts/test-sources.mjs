@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import assert from 'node:assert/strict';
 fs.mkdirSync('outputs/source-tests',{recursive:true});
-for(const name of ['search','job-sources','source-scanner','jsearch']){
+for(const name of ['search','job-sources','source-scanner','jsearch','headcount','job-provider']){
  const source=fs.readFileSync(`lib/${name}.ts`,'utf8').replace(/from '(\.\/[^']+)'/g,"from '$1.mjs'");
  fs.writeFileSync(`outputs/source-tests/${name}.mjs`,ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
 }
 const {indexedJobs,searchIndexedJobs,postingDate}=await import('../outputs/source-tests/jsearch.mjs');
 const {detailLinks,scanSource,sourcePage}=await import('../outputs/source-tests/source-scanner.mjs');
-const job={employer_name:'Example Ltd',job_title:'Software Engineer',job_apply_link:'https://example.com/jobs/1',job_description:'Build tools'};
+const job={job_country:'ZA',employer_name:'Example Ltd',job_title:'Software Engineer',job_apply_link:'https://example.com/jobs/1',job_description:'Build tools'};
 assert.equal(indexedJobs([job],'Example','engineer').length,1);
 for(const altered of [{employer_name:'Other'},{job_title:'Designer'},{job_apply_link:'javascript:alert(1)'},{job_offer_expiration_datetime_utc:'2000-01-01'}])assert.equal(indexedJobs([{...job,...altered}],'Example','engineer').length,0);
 let calls=0;
@@ -33,3 +33,30 @@ assert.equal(postingDate({job_posted_at_datetime_utc:'bad',job_posted_at_timesta
 for(const j of [{},{job_posted_at:'3 days ago'},{job_posted_at_timestamp:0},{job_posted_at_datetime_utc:'2099-01-01'},{job_posted_at_timestamp:1792440000000}])assert.equal(postingDate(j,now),null);
 assert.equal(indexedJobs([{...job,job_posted_at_datetime_utc:'2026-10-20T10:00:00Z'}],'Example','engineer',now)[0].posted_at,Date.UTC(2026,9,20,10));
 console.log('PASS: posting-date mapping, timestamp fallback, missing/invalid/future dates.');
+
+const {searchJobs}=await import('../outputs/source-tests/job-provider.mjs');
+const {headcountJobs}=await import('../outputs/source-tests/headcount.mjs');
+const known=value=>({state:'known',value});
+const hc={currentness:'current',employer_name:known('Example'),title:known('Software Engineer'),description:known('Build tools'),locations:[known({city:'Cape Town',country:'ZA'})],postings:[{posting_status:'listed',posting_url:known('https://example.com/jobs/1'),source_posted_at:'2026-10-20T10:00:00Z'}]};
+assert.equal(headcountJobs([hc],'Example','engineer').length,1);
+assert.equal(headcountJobs([{...hc,currentness:'not_current'}],'Example','engineer').length,0);
+assert.equal(headcountJobs([hc],'Other','engineer').length,0);
+assert.equal(headcountJobs([hc],'Example','designer').length,0);
+let pause,primary=0,backup=0;
+const state={get:async()=>pause,set:async value=>{pause=value;}};
+const providerFetch=async url=>{if(new URL(url).hostname==='api.openwebninja.com'){primary++;return new Response('Quota exceeded',{status:429});}backup++;return Response.json({data:[hc]});};
+const keys={jsearch:'test-j',headcount:'test-h'};
+assert.equal((await searchJobs('Example','engineer',keys,state,providerFetch,now)).provider,'headcount');
+assert.equal((await searchJobs('Example','engineer',keys,state,providerFetch,now+1000)).provider,'headcount');
+assert.equal(primary,1);assert.equal(backup,2);
+assert.equal((await searchJobs('Example','engineer',keys,state,async url=>{assert.equal(new URL(url).hostname,'api.openwebninja.com');return Response.json({data:{jobs:[job]}});},now+86400001)).provider,'jsearch');
+await assert.rejects(()=>searchJobs('Example','engineer',keys,{get:async()=>undefined,set:async()=>{}},async()=>new Response('',{status:401}),now),/key or subscription/);
+console.log('PASS: quota fallback, persisted cooldown, automatic primary retry, no fallback on invalid key, Headcount employer/title/currentness filtering.');
+
+for(const country of ['US','GB','',null,undefined])assert.equal(indexedJobs([{...job,job_country:country}],'Example','engineer').length,0);
+for(const country of ['ZA','ZAF','South Africa'])assert.equal(indexedJobs([{...job,job_country:country}],'Example','engineer').length,1);
+assert.equal(headcountJobs([{...hc,locations:[known({country:'US'})]}],'Example','engineer').length,0);
+assert.equal(headcountJobs([{...hc,locations:[]}],'Example','engineer').length,0);
+assert.equal(headcountJobs([{...hc,postings:[{...hc.postings[0],location:known({country:'US'})}]}],'Example','engineer').length,0);
+assert.equal(headcountJobs([{...hc,locations:[known({city:'New York',country:'US'}),known({city:'Cape Town',country:'ZA'})]}],'Example','engineer')[0].location,'Cape Town, ZA');
+console.log('PASS: both providers reject foreign and unconfirmed countries; mixed-location results show South Africa only.');

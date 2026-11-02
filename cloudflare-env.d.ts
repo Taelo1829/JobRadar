@@ -9,5 +9,6 @@ declare namespace Cloudflare {
     ASSETS?: Fetcher;
     APP_ORIGIN?: string;
     JSEARCH_API_KEY?: string;
+    HEADCOUNT_API_KEY?: string;
   }
 }

@@ -1,4 +1,6 @@
 import {normalCompany,publicUrl} from './search';
+export const isSouthAfrica=(country:unknown)=>typeof country==='string'&&['za','zaf','south africa'].includes(country.trim().toLowerCase());
+export class JSearchQuotaError extends Error {}
 
 export function postingDate(job:any,now=Date.now()):number|null {
  const iso=typeof job.job_posted_at_datetime_utc==='string'&&/^\d{4}-\d{2}-\d{2}(T|$)/.test(job.job_posted_at_datetime_utc)?Date.parse(job.job_posted_at_datetime_utc):NaN;
@@ -9,6 +11,7 @@ export function postingDate(job:any,now=Date.now()):number|null {
 export function indexedJobs(rows:any[],company:string,role:string,now=Date.now()) {
  const jobs:any[]=[];
  for(const j of rows){
+  if(!isSouthAfrica(j.job_country))continue;
   if(normalCompany(String(j.employer_name||''))!==normalCompany(company))continue;
   if(!role.toLowerCase().split(/\s+/).filter(Boolean).every(w=>String(j.job_title||'').toLowerCase().includes(w)))continue;
   if(j.job_offer_expiration_datetime_utc&&Date.parse(j.job_offer_expiration_datetime_utc)<now)continue;
@@ -20,7 +23,7 @@ export async function searchIndexedJobs(company:string,role:string,key:string,fe
  const url=new URL('https://api.openwebninja.com/jsearch/search-v2');
  url.search=new URLSearchParams({query:`${role} at ${company} in South Africa`,country:'za',num_pages:'1'}).toString();
  const r=await fetcher(url,{headers:{'x-api-key':key,Accept:'application/json'},signal:AbortSignal.timeout(30000),redirect:'manual'});
- if(!r.ok){await r.body?.cancel();throw new Error(r.status===429?'JSearch quota or rate limit reached':r.status===401||r.status===403?'JSearch key or subscription needs attention':`JSearch unavailable (HTTP ${r.status})`);}
+ if(!r.ok){const error=await r.text();if(r.status===429||r.status===402||([403,400].includes(r.status)&&/quota|credits? exhausted|limit exceeded|insufficient credits/i.test(error)))throw new JSearchQuotaError('JSearch quota or rate limit reached');throw new Error(r.status===401||r.status===403?'JSearch key or subscription needs attention':`JSearch unavailable (HTTP ${r.status})`);}
  const data:any=await r.json();const rows=Array.isArray(data.data)?data.data:data.data?.jobs;
  if(!Array.isArray(rows))throw new Error('JSearch returned an unreadable response');
  return {jobs:indexedJobs(rows,company,role),message:'Indexed results via JSearch · first page only; coverage varies by publisher'};

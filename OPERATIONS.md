@@ -20,7 +20,7 @@ All assets and APIs require the app password on standalone Cloudflare. The Sites
 
 ## Searches and notifications
 
-Searches use only the configured JSearch API. Direct website scraping, custom career boards, Brave discovery, and legacy ingestion are disabled. Saved legacy board addresses are ignored.
+Searches use JSearch first and Headcount Labs when JSearch reports quota exhaustion or rate limiting. Direct website scraping, custom career boards, Brave discovery, and legacy ingestion are disabled. Saved legacy board addresses are ignored.
 
 - JSearch: configure JSEARCH_API_KEY in Cloudflare with `node scripts/provision-jsearch.mjs`. This reads JSEARCH_API_KEY (or JSearch_API_KEY) from ignored .env.local and sends it via stdin to Wrangler. Indexed listings from LinkedIn, Indeed and other publishers are imported automatically with strict employer/title filtering. One page per watch per scan limits usage (about 570 requests per watch per 30 days, plus manual checks). Index coverage varies and is not a direct exhaustive scan of each publisher. Quota/authentication failures appear in source status. Secrets stay on the server.
 
@@ -35,3 +35,9 @@ Searches use only the configured JSearch API. Direct website scraping, custom ca
 For local cron verification, run `node scripts/test-cron.mjs` after building. It starts an isolated Miniflare runtime with an in-memory database, invokes the compiled scheduled handler and verifies the persisted completion marker. Production cron registration is shown by Wrangler deploy; it can take up to 15 minutes to propagate.
 
 Creating a saved search runs its initial scan in the save API before returning. The UI opens Job Posts, clears filters and displays progress; subsequent scans use the existing SAST cron.
+
+Headcount Labs fallback: `node scripts/provision-headcount.mjs` uploads the locally stored key via stdin. On a JSearch quota response, D1 records a 24-hour pause shared by all searches. Checks use Headcount during that pause, then automatically probe JSearch again. Authentication and generic server errors do not trigger quota fallback. Headcount reads up to 25 current South African listings per company/role per check. Neither provider is called after the other succeeds, including zero-result responses.
+
+Posting dates come from JSearch posted datetime/timestamp or Headcount source_posted_at. Missing or invalid dates stay null. Repeat matches can fill missing dates without resetting status, discovery time, application date, or sending duplicate alerts.
+
+Both providers request South African jobs and validate returned country fields before saving. JSearch must explicitly identify ZA/ZAF/South Africa. Headcount must include a known ZA location and must not select a posting explicitly located abroad. Unknown countries and global remote roles without confirmed South African eligibility are excluded.
