@@ -34,3 +34,5 @@ All assets and APIs require the app password on standalone Cloudflare. The Sites
 `npx tsc --noEmit` checks types; `npm run build` creates the Worker. `node scripts/test-search.mjs` tests employer/title matching, expiry and structured-data parsing. `scripts/test-local.mjs` tests the preview API against a local QA Test Company watch only. No sample listings are created in production.
 
 For local cron verification, run `node scripts/test-cron.mjs` after building. It starts an isolated Miniflare runtime with an in-memory database, invokes the compiled scheduled handler and verifies the persisted completion marker. Production cron registration is shown by Wrangler deploy; it can take up to 15 minutes to propagate.
+
+Creating a saved search runs its initial scan in the save API before returning. The UI opens Job Posts, clears filters and displays progress; subsequent scans use the existing SAST cron.
