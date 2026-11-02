@@ -12,7 +12,7 @@ const worker = {
   },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     if (env.STANDALONE === 'true') {
-      const publicPwaAssets=['/manifest.webmanifest','/offline.html','/icons/icon-192.png','/icons/icon-512.png','/icons/maskable-512.png','/icons/apple-touch-icon.png'];
+      const publicPwaAssets=['/manifest.webmanifest','/offline.html','/offline','/icons/icon-192.png','/icons/icon-512.png','/icons/maskable-512.png','/icons/apple-touch-icon.png'];
       if(env.ASSETS&&['GET','HEAD'].includes(request.method)&&publicPwaAssets.includes(new URL(request.url).pathname)){
         const response=await env.ASSETS.fetch(request);const headers=new Headers(response.headers);
         if(new URL(request.url).pathname==='/manifest.webmanifest'){headers.set('Content-Type','application/manifest+json');headers.set('Cache-Control','no-cache');}
@@ -55,3 +55,4 @@ const worker = {
 };
 
 export default worker;
+
