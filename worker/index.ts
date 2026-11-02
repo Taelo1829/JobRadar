@@ -23,7 +23,7 @@ const worker = {
       const headers=new Headers(request.headers);
       headers.set('oai-authenticated-user-id','job-radar-owner');headers.set('oai-authenticated-user-email','owner@jobradar.local');
       request=new Request(request,{headers});
-      if(env.ASSETS) {const asset=await env.ASSETS.fetch(request);if(asset.status!==404)return asset;}
+      if(env.ASSETS && ['GET','HEAD'].includes(request.method) && !new URL(request.url).pathname.startsWith('/api/')) {const asset=await env.ASSETS.fetch(request);if(asset.status!==404)return asset;}
     }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
