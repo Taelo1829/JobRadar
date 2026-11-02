@@ -41,3 +41,5 @@ Headcount Labs fallback: `node scripts/provision-headcount.mjs` uploads the loca
 Posting dates come from JSearch posted datetime/timestamp or Headcount source_posted_at. Missing or invalid dates stay null. Repeat matches can fill missing dates without resetting status, discovery time, application date, or sending duplicate alerts.
 
 Both providers request South African jobs and validate returned country fields before saving. JSearch must explicitly identify ZA/ZAF/South Africa. Headcount must include a known ZA location and must not select a posting explicitly located abroad. Unknown countries and global remote roles without confirmed South African eligibility are excluded.
+
+Unapplied matches disappear from the API and UI exactly seven days after found_at. Records remain stored for deduplication so repeated API results cannot re-add them or notify again. Applied jobs retain the separate 14-day applied_at window.

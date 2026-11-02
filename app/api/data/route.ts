@@ -1,9 +1,10 @@
+import {visibleJobsSql,MATCH_WINDOW_MS,APPLIED_WINDOW_MS} from '../../../lib/job-retention';
 import { db, setting, vapid, validPush, scan } from '../../../lib/radar';
 import { getChatGPTUser } from '../../chatgpt-auth';
 import { env } from 'cloudflare:workers';
 export async function GET() {
   if(!await getChatGPTUser())return Response.json({error:'Sign in to continue'},{status:401});
-  const [w,j,s]=await Promise.all([db().prepare('SELECT * FROM watches ORDER BY company').all(),db().prepare("SELECT * FROM jobs WHERE status='new' OR (status='applied' AND applied_at>=?) ORDER BY found_at DESC").bind(Date.now()-14*86400000).all(),setting('schedule')]);
+  const [w,j,s]=await Promise.all([db().prepare('SELECT * FROM watches ORDER BY company').all(),db().prepare(visibleJobsSql).bind(Date.now()-MATCH_WINDOW_MS,Date.now()-APPLIED_WINDOW_MS).all(),setting('schedule')]);
   const checks=await db().prepare("SELECT * FROM source_checks WHERE source IN ('jsearch','headcount')").all<any>();
   return Response.json({watches:w.results.map((watch:any)=>({...watch,sourceChecks:checks.results.filter(c=>c.watch_id===watch.id)})),jobs:j.results,schedule:env.SCHEDULER_ENABLED==='true'?'active':'pending',searchConfigured:!!(env.JSEARCH_API_KEY||env.HEADCOUNT_API_KEY),indexedConfigured:!!env.JSEARCH_API_KEY,pushError:await setting('pushError')},{headers:{'Cache-Control':'no-store'}});
 }
