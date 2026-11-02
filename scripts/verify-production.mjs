@@ -6,7 +6,7 @@ const headers={Authorization:'Basic '+Buffer.from('owner:'+password).toString('b
 async function api(path,body){const r=await fetch(url+path,{headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});assert.equal(r.status,200,path);return r.json();}
 assert.equal((await fetch(url)).status,401);
 const page=await fetch(url,{headers});assert.equal(page.status,200);const html=await page.text();
-for(const name of ['LinkedIn Jobs','Indeed South Africa','PNet','CareerJunction'])assert.ok(html.includes(name),name);
+assert.ok(!html.includes('source-grid'),'Source status cards must not appear in the UI');
 assert.ok(!html.includes('DEFAULT SEARCH SITES')&&!html.includes('AUTOMATIC SOURCES'));
 assert.equal((await fetch(url+'/sw.js',{headers})).status,200);
 let id;

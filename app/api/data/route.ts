@@ -23,7 +23,8 @@ export async function POST(req:Request) {
     if(b.action==='board') { parseBoard(b.board);await db().prepare('UPDATE watches SET board=?,message=? WHERE id=?').bind(b.board,'Ready to check',b.id).run(); }
     else if(b.action==='remove')await db().batch([db().prepare('DELETE FROM source_checks WHERE watch_id=?').bind(b.id),db().prepare('DELETE FROM watches WHERE id=?').bind(b.id)]);
     else if(b.action==='status') { if(!['new','applied','dismissed'].includes(b.status))throw new Error('Invalid status');await db().prepare('UPDATE jobs SET status=?,applied_at=? WHERE id=?').bind(b.status,b.status==='applied'?Date.now():null,b.id).run(); }
-    else if(b.action==='subscribe') { if(!validPush(b.endpoint))throw new Error('Unsupported push provider');await db().prepare('INSERT OR IGNORE INTO subscriptions(endpoint,created_at) VALUES(?,?)').bind(b.endpoint,Date.now()).run(); }
+    else if(b.action==='subscribe') { if(!validPush(b.endpoint)){let host='unknown';try{host=new URL(b.endpoint).hostname;}catch{}throw new Error('Notifications are unavailable with this browser provider ('+host+'). Open Job Radar in Chrome, Edge, Firefox or Safari to enable push alerts.');}await db().prepare('INSERT OR IGNORE INTO subscriptions(endpoint,created_at) VALUES(?,?)').bind(b.endpoint,Date.now()).run(); }
+    else if(b.action==='subscriptionStatus')return Response.json({registered:!!(await db().prepare('SELECT endpoint FROM subscriptions WHERE endpoint=?').bind(String(b.endpoint||'')).first())});
     else if(b.action==='unsubscribe')await db().prepare('DELETE FROM subscriptions WHERE endpoint=?').bind(b.endpoint).run();
     else if(b.action==='pushKey')return Response.json({key:(await vapid()).publicKey});
     else throw new Error('Unknown action');return Response.json({ok:true});
