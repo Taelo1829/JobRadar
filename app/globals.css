@@ -12,3 +12,5 @@
 .watch-list{max-height:min(420px,55vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#b9aad8 transparent;padding-right:6px}.watch-list:focus-visible{outline:2px solid #9e8de6;outline-offset:3px;border-radius:5px}
 
 .application-followup{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}.mark-applied{display:inline-flex;align-items:center;gap:5px;color:#745abd;font-size:11px;text-decoration:underline;text-underline-offset:3px;padding:5px 0}
+
+.job-summary .posted-date{display:block;margin-bottom:4px;color:#75648b}.posting-date{font-size:12px;color:#7e8092;margin:0 0 14px}

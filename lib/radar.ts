@@ -38,7 +38,9 @@ export function canonical(url: string) { const u=new URL(url); if(u.protocol!=='
 export async function insertJob(w:any,j:any) {
   if(!j.title || !j.url || !matches(j.title,w.role))return 0;
   const url=canonical(j.url);const id=b64(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(w.company.toLowerCase().trim()+'|'+url)));
-  const result=await db().prepare('INSERT OR IGNORE INTO jobs(id,watch_id,company,title,location,url,description,found_at,status) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,w.id,w.company,String(j.title).slice(0,300),String(j.location||'Location not listed').slice(0,300),url,plain(String(j.description||'View the original posting for the full description.')).slice(0,50000),Date.now(),'new').run();return result.meta.changes||0;
+  const result=await db().prepare('INSERT OR IGNORE INTO jobs(id,watch_id,company,title,location,url,description,found_at,status,posted_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,w.id,w.company,String(j.title).slice(0,300),String(j.location||'Location not listed').slice(0,300),url,plain(String(j.description||'View the original posting for the full description.')).slice(0,50000),Date.now(),'new',j.posted_at??null).run();
+  if(!result.meta.changes&&j.posted_at!=null)await db().prepare('UPDATE jobs SET posted_at=? WHERE id=? AND posted_at IS NULL').bind(j.posted_at,id).run();
+  return result.meta.changes||0;
 }
 export async function scan(onlyId?:string):Promise<{newJobs:number;message?:string;failed?:number}> {
   // Each watch gets a separate invocation so one large watchlist cannot exhaust
