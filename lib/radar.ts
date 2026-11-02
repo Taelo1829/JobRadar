@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { discoverJobs } from './search';
 export function db() { if (!env.DB) throw new Error('Database unavailable'); return env.DB; }
 export async function setting(key: string) { return (await db().prepare('SELECT value FROM settings WHERE key=?').bind(key).first<{value:string}>())?.value; }
 export async function setSetting(key: string,value: string) { await db().prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,value).run(); }
@@ -43,7 +44,7 @@ async function boardJobs(provider:string,slug:string) {
   const url=provider==='greenhouse'?`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`:provider==='lever'?`https://api.lever.co/v0/postings/${slug}?mode=json`:`https://api.ashbyhq.com/posting-api/job-board/${slug}`;
   const r=await fetch(url,{signal:AbortSignal.timeout(15000)}); if(!r.ok)throw new Error(`${provider}: ${r.status}`); const data:any=await r.json();
   if(provider==='greenhouse'&&!Array.isArray(data.jobs)||provider==='lever'&&!Array.isArray(data)||provider==='ashby'&&!Array.isArray(data.jobs))throw new Error('Invalid board response');
-  return (provider==='lever'?data:data.jobs).map((j:any)=>({title:j.title||j.text,url:j.absolute_url||j.hostedUrl||j.jobUrl,location:j.location?.name||j.categories?.location||j.location,description:j.content||j.descriptionPlain||j.descriptionHtml||j.description}));
+  return (provider==='lever'?data:data.jobs).map((j:any)=>({title:j.title||j.text,url:j.absolute_url||j.hostedUrl||j.jobUrl,location:j.location?.name||j.categories?.location||j.location,description:provider==='lever'?[j.descriptionPlain||j.description,...(j.lists||[]).map((l:any)=>l.text+'\n'+plain(l.content)),j.additionalPlain||j.additional].filter(Boolean).join('\n\n'):j.content||j.descriptionHtml||j.description}));
 }
 export function parseBoard(board:string) {
   const u=new URL(board); const slug=u.pathname.split('/').filter(Boolean)[0];if(!slug||!/^[a-zA-Z0-9_-]+$/.test(slug))throw new Error('Invalid board address');
@@ -57,10 +58,15 @@ export async function scan() {
     const watches=await db().prepare('SELECT * FROM watches').all<any>();
     for(const w of watches.results) {
       try {
-        if(!w.board) { await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Needs career board · add a verified board URL, or wait for web discovery',w.id).run();continue; }
+        if(!w.board) {
+          if(!env.BRAVE_SEARCH_API_KEY) {await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Search service not configured · add a career board for direct checks',w.id).run();continue;}
+          const discovered=await discoverJobs(w.company,w.role,env.BRAVE_SEARCH_API_KEY);let found=0;
+          for(const job of discovered.jobs)found+=await insertJob(w,job);count+=found;
+          await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${discovered.jobs.length} verified matches · ${found} new${discovered.failed?' · some pages unavailable':''}`,w.id).run();continue;
+        }
         const b=parseBoard(w.board);const jobs=await boardJobs(b.provider,b.slug); let found=0;for(const j of jobs) found+=await insertJob(w,j);count+=found;
         await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${jobs.filter((j:any)=>matches(j.title,w.role)).length} matching roles · ${found} new`,w.id).run();
       } catch(e:any) { await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Check failed · '+e.message,w.id).run(); }
-    }await notifyNew(count); return {newJobs:count};
+    }await notifyNew(count); await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:count})); return {newJobs:count};
   } finally { await setSetting('scanLock','0'); }
 }

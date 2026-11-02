@@ -1,9 +1,10 @@
 import { db, setting, vapid, validPush, parseBoard } from '../../../lib/radar';
 import { getChatGPTUser } from '../../chatgpt-auth';
+import { env } from 'cloudflare:workers';
 export async function GET() {
   if(!await getChatGPTUser())return Response.json({error:'Sign in to continue'},{status:401});
   const [w,j,s]=await Promise.all([db().prepare('SELECT * FROM watches ORDER BY company').all(),db().prepare("SELECT * FROM jobs WHERE status='new' OR (status='applied' AND applied_at>=?) ORDER BY found_at DESC").bind(Date.now()-14*86400000).all(),setting('schedule')]);
-  return Response.json({watches:w.results,jobs:j.results,schedule:s||'pending',pushError:await setting('pushError')},{headers:{'Cache-Control':'no-store'}});
+  return Response.json({watches:w.results,jobs:j.results,schedule:env.SCHEDULER_ENABLED==='true'?'active':'pending',searchConfigured:!!env.BRAVE_SEARCH_API_KEY,pushError:await setting('pushError')},{headers:{'Cache-Control':'no-store'}});
 }
 export async function POST(req:Request) {
   if(!await getChatGPTUser())return Response.json({error:'Sign in to continue'},{status:401});
@@ -12,6 +13,7 @@ export async function POST(req:Request) {
     const b:any=await req.json();
     if(b.action==='watch') {
       const company=String(b.company||'').trim(),role=String(b.role||'').trim(),board=String(b.board||'').trim();if(!company||!role||company.length>100||role.length>120)throw new Error('Enter a company and job role');if(board)parseBoard(board);
+      if(!board&&!env.BRAVE_SEARCH_API_KEY)throw new Error('Add a Greenhouse, Lever or Ashby career-board URL to start this search.');
       const exists=await db().prepare('SELECT id FROM watches WHERE lower(company)=lower(?) AND lower(role)=lower(?)').bind(company,role).first();if(exists)throw new Error('You are already tracking this company and role');
       const n=await db().prepare('SELECT count(*) AS n FROM watches').first<any>();if(n.n>=20)throw new Error('You can track up to 20 searches');
       const id=crypto.randomUUID();await db().prepare('INSERT INTO watches(id,company,role,board) VALUES(?,?,?,?)').bind(id,company,role,board).run();return Response.json({id});

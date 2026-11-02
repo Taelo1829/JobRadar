@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { extractJobs, publicUrl, normalCompany } from '../lib/search.ts';
+const job={'@type':'JobPosting',title:'Senior Software Engineer',hiringOrganization:{name:'Example Inc.'},jobLocation:{address:{addressLocality:'Cape Town',addressCountry:'ZA'}},description:'Build tools',validThrough:'2099-01-01'};
+const html=value=>'<script type="application/ld+json">'+JSON.stringify(value)+'</script>';
+assert.equal(normalCompany('Example (Pty) Ltd'),'example');
+assert.equal(extractJobs(html(job),'https://example.com/job','Example','software engineer').length,1);
+assert.equal(extractJobs(html(job),'https://example.com/job','Other','software engineer').length,0);
+assert.equal(extractJobs(html(job),'https://example.com/job','Example','designer').length,0);
+assert.equal(extractJobs(html({...job,validThrough:'2000-01-01'}),'https://example.com/job','Example','engineer').length,0);
+assert.equal(extractJobs(html({'@graph':[job]}),'https://example.com/job','Example','engineer')[0].location,'Cape Town, ZA');
+assert.equal(extractJobs('<script type="application/ld+json">invalid</script>','https://example.com/job','Example','engineer').length,0);
+for(const url of ['http://example.com','https://127.0.0.1','https://localhost','https://[::1]','https://user:pass@example.com','https://test.internal'])assert.throws(()=>publicUrl(url));
+assert.equal(publicUrl('https://jobs.example.com/role').hostname,'jobs.example.com');
+console.log('PASS: employer matching, title matching, expiry, graph parsing, malformed JSON, source URL validation.');
