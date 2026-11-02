@@ -20,6 +20,8 @@ All assets and APIs require the app password on standalone Cloudflare. The Sites
 
 ## Searches and notifications
 
+- Default manual search sites: LinkedIn Jobs, Indeed South Africa, PNet and CareerJunction. Every saved company/role has prefilled links to all four. These links do not import listings, run scheduled searches, or send new-job notifications. Saving a search without an automatic-check board is allowed and explicitly marked as manual.
+
 - Direct boards: Greenhouse, Lever and Ashby public APIs. Titles must include every word of the requested role.
 - General discovery: Brave Search discovers pages; only JobPosting structured data whose employer matches the requested company is imported. Expired structured postings are excluded. Search coverage is limited by indexing and employer markup. Provider and page failures are surfaced rather than treated as confirmed zero vacancies.
 - Jobs are deduplicated by company and canonical source URL. Applied and dismissed records remain stored to avoid repeat notifications. Applied Posts shows the trailing 14 days using application time, not posting time.

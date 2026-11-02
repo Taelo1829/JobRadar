@@ -59,7 +59,7 @@ export async function scan() {
     for(const w of watches.results) {
       try {
         if(!w.board) {
-          if(!env.BRAVE_SEARCH_API_KEY) {await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Search service not configured · add a career board for direct checks',w.id).run();continue;}
+          if(!env.BRAVE_SEARCH_API_KEY) {await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Open your default site searches · add a supported career board for automatic checks',w.id).run();continue;}
           const discovered=await discoverJobs(w.company,w.role,env.BRAVE_SEARCH_API_KEY);let found=0;
           for(const job of discovered.jobs)found+=await insertJob(w,job);count+=found;
           await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${discovered.jobs.length} verified matches · ${found} new${discovered.failed?' · some pages unavailable':''}`,w.id).run();continue;
