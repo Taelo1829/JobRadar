@@ -7,7 +7,7 @@ try{
  const db=await mf.getD1Database('DB');
  const migration=fs.readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort().map(f=>fs.readFileSync('drizzle/'+f,'utf8')).join('--> statement-breakpoint');
  for(const sql of migration.split('--> statement-breakpoint'))await db.prepare(sql.trim()).run();
- const r=await mf.dispatchFetch('http://localhost/cdn-cgi/handler/scheduled?cron=0+*+*+*+*');
+ const r=await mf.dispatchFetch('http://localhost/cdn-cgi/handler/scheduled?cron=0+3-21+*+*+*');
  console.log('Scheduled response:',r.status,await r.text());
  assert.equal(r.status,200);
  const run=await db.prepare("SELECT value FROM settings WHERE key='schedulerLastRun'").first();assert.ok(run);

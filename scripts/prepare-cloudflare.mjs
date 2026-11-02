@@ -9,6 +9,6 @@ config.name=deployment.worker_name;config.account_id=deployment.account_id;confi
 config.compatibility_flags=[...new Set([...config.compatibility_flags,'global_fetch_strictly_public'])];
 config.d1_databases=[{binding:'DB',database_name:'job-radar',database_id:databaseId,migrations_dir:path.resolve('drizzle')}];
 config.vars={...config.vars,STANDALONE:'true',SCHEDULER_ENABLED:'true',APP_ORIGIN:deployment.url};
-config.triggers={crons:['0 * * * *']}; // Every hour on the hour, including Africa/Johannesburg.
+config.triggers={crons:['0 3-21 * * *']}; // 03:00-21:00 UTC = 05:00-23:00 SAST, inclusive.
 config.assets={...config.assets,binding:'ASSETS',run_worker_first:true};
 fs.writeFileSync(output,JSON.stringify(config,null,2)+'\n');console.log(output);
