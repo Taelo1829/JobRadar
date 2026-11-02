@@ -6,6 +6,7 @@ const headers={Authorization:'Basic '+Buffer.from('owner:'+password).toString('b
 async function api(path,body){const r=await fetch(url+path,{headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});assert.equal(r.status,200,path);return r.json();}
 assert.equal((await fetch(url)).status,401);
 const page=await fetch(url,{headers});assert.equal(page.status,200);const html=await page.text();
+assert.ok(!html.includes('Add career board')&&!html.includes('jobs.lever.co'));
 assert.ok(!html.includes('source-grid'),'Source status cards must not appear in the UI');
 assert.ok(!html.includes('DEFAULT SEARCH SITES')&&!html.includes('AUTOMATIC SOURCES'));
 assert.equal((await fetch(url+'/sw.js',{headers})).status,200);
@@ -16,9 +17,9 @@ try {
  assert.equal(state.indexedConfigured,true);
  assert.ok(!created.initial.message.includes('could not finish'),created.initial.message);
  const checked=(await api('/api/data')).watches.find(w=>w.id===id);
- assert.equal(checked.sourceChecks.length,4);
+ assert.equal(checked.sourceChecks.length,1);
  console.log('Live source checks:',JSON.stringify(checked.sourceChecks.map(c=>({source:c.source,status:c.status,message:c.message}))));
- for(const source of ['linkedin','indeed'])assert.equal(checked.sourceChecks.find(c=>c.source===source).status,'partial');
+ assert.equal(checked.sourceChecks[0].source,'jsearch');assert.equal(checked.sourceChecks[0].status,'ok');
  const status=await api('/api/automation');assert.ok(status.lastRun.completedAt>Date.now()-60000);
 }finally{if(id)await api('/api/data',{action:'remove',id});}
 console.log('PASS: live source status, authentication, search save/read/remove, JSearch, immediate first check on save and service worker. Temporary search removed.');

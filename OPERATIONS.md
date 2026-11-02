@@ -20,11 +20,10 @@ All assets and APIs require the app password on standalone Cloudflare. The Sites
 
 ## Searches and notifications
 
-- Automatic sources: PNet and CareerJunction public search pages, with up to six detail pages per source per search. Employer/title matching and expiry checks precede import. Source status reports partial coverage and failures.
+Searches use only the configured JSearch API. Direct website scraping, custom career boards, Brave discovery, and legacy ingestion are disabled. Saved legacy board addresses are ignored.
+
 - JSearch: configure JSEARCH_API_KEY in Cloudflare with `node scripts/provision-jsearch.mjs`. This reads JSEARCH_API_KEY (or JSearch_API_KEY) from ignored .env.local and sends it via stdin to Wrangler. Indexed listings from LinkedIn, Indeed and other publishers are imported automatically with strict employer/title filtering. One page per watch per scan limits usage (about 570 requests per watch per 30 days, plus manual checks). Index coverage varies and is not a direct exhaustive scan of each publisher. Quota/authentication failures appear in source status. Secrets stay on the server.
 
-- Direct boards: Greenhouse, Lever and Ashby public APIs. Titles must include every word of the requested role.
-- General discovery: Brave Search discovers pages; only JobPosting structured data whose employer matches the requested company is imported. Expired structured postings are excluded. Search coverage is limited by indexing and employer markup. Provider and page failures are surfaced rather than treated as confirmed zero vacancies.
 - Jobs are deduplicated by company and canonical source URL. Applied and dismissed records remain stored to avoid repeat notifications. Applied Posts shows the trailing 14 days using application time, not posting time.
 - Web Push requires the user's browser permission on each device. The server stores subscriptions and a generated VAPID key pair in D1. It sends an authenticated empty push; the service worker fetches the current message with a generic fallback if the private session expired. Browser/OS support and permissions affect delivery.
 - Applied tracks an application; it does not submit one.

@@ -1,6 +1,4 @@
 import { env } from 'cloudflare:workers';
-import { discoverJobs } from './search';
-import { scanSource, SOURCE_IDS } from './source-scanner';
 import { searchIndexedJobs } from './jsearch';
 export function db() { if (!env.DB) throw new Error('Database unavailable'); return env.DB; }
 export async function setting(key: string) { return (await db().prepare('SELECT value FROM settings WHERE key=?').bind(key).first<{value:string}>())?.value; }
@@ -42,55 +40,32 @@ export async function insertJob(w:any,j:any) {
   const url=canonical(j.url);const id=b64(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(w.company.toLowerCase().trim()+'|'+url)));
   const result=await db().prepare('INSERT OR IGNORE INTO jobs(id,watch_id,company,title,location,url,description,found_at,status) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,w.id,w.company,String(j.title).slice(0,300),String(j.location||'Location not listed').slice(0,300),url,plain(String(j.description||'View the original posting for the full description.')).slice(0,50000),Date.now(),'new').run();return result.meta.changes||0;
 }
-async function boardJobs(provider:string,slug:string) {
-  const url=provider==='greenhouse'?`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`:provider==='lever'?`https://api.lever.co/v0/postings/${slug}?mode=json`:`https://api.ashbyhq.com/posting-api/job-board/${slug}`;
-  const r=await fetch(url,{signal:AbortSignal.timeout(15000)}); if(!r.ok)throw new Error(`${provider}: ${r.status}`); const data:any=await r.json();
-  if(provider==='greenhouse'&&!Array.isArray(data.jobs)||provider==='lever'&&!Array.isArray(data)||provider==='ashby'&&!Array.isArray(data.jobs))throw new Error('Invalid board response');
-  return (provider==='lever'?data:data.jobs).map((j:any)=>({title:j.title||j.text,url:j.absolute_url||j.hostedUrl||j.jobUrl,location:j.location?.name||j.categories?.location||j.location,description:provider==='lever'?[j.descriptionPlain||j.description,...(j.lists||[]).map((l:any)=>l.text+'\n'+plain(l.content)),j.additionalPlain||j.additional].filter(Boolean).join('\n\n'):j.content||j.descriptionHtml||j.description}));
-}
-export function parseBoard(board:string) {
-  const u=new URL(board); const slug=u.pathname.split('/').filter(Boolean)[0];if(!slug||!/^[a-zA-Z0-9_-]+$/.test(slug))throw new Error('Invalid board address');
-  const provider=['boards.greenhouse.io','job-boards.greenhouse.io'].includes(u.hostname)?'greenhouse':u.hostname==='jobs.lever.co'?'lever':u.hostname==='jobs.ashbyhq.com'?'ashby':null;
-  if(!provider)throw new Error('Use a Greenhouse, Lever or Ashby board URL');return {provider,slug};
-}
-export async function scan(onlyId?:string):Promise<{newJobs:number;message?:string}> {
+export async function scan(onlyId?:string):Promise<{newJobs:number;message?:string;failed?:number}> {
   // Each watch gets a separate invocation so one large watchlist cannot exhaust
   // the Worker's per-invocation external-request allowance.
   if(!onlyId&&env.APP_ORIGIN&&env.APP_PASSWORD){
     const watches=await db().prepare('SELECT id FROM watches').all<{id:string}>();let total=0,failed=0;
     for(const w of watches.results)try{
       const r=await fetch(new URL('/api/run',env.APP_ORIGIN),{method:'POST',headers:{Authorization:'Basic '+btoa('owner:'+env.APP_PASSWORD),'Content-Type':'application/json'},body:JSON.stringify({watchId:w.id}),signal:AbortSignal.timeout(240000)});
-      if(!r.ok){await r.body?.cancel();failed++;continue;}const result:any=await r.json();total+=result.newJobs||0;
+      if(!r.ok){await r.body?.cancel();failed++;continue;}const result:any=await r.json();total+=result.newJobs||0;failed+=result.failed||0;
     }catch{failed++;}
-    await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:total,failed}));return {newJobs:total,message:`${total} new jobs. ${failed?`${failed} searches could not complete. `:''}See each source's status for coverage.`};
+    await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:total,failed}));return {newJobs:total,failed,message:`${total} new jobs. ${failed?`${failed} searches could not complete. `:''}Checks complete.`};
   }
   const lockKey='scanLock:'+(onlyId||'all');
   const lock=await db().prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(settings.value AS INTEGER) < ?").bind(lockKey,String(Date.now()+600000),Date.now()).run();if(!lock.meta.changes)return {newJobs:0,message:'A check is already running'};
-  let count=0;
+  let count=0,failed=0;
   try {
     const watches=await db().prepare(onlyId?'SELECT * FROM watches WHERE id=?':'SELECT * FROM watches').bind(...(onlyId?[onlyId]:[])).all<any>();
     for(const w of watches.results) {
       let watchCount=0;
-      const record=async(source:string,status:string,message:string)=>db().prepare('INSERT INTO source_checks(id,watch_id,source,status,message,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,message=excluded.message,checked_at=excluded.checked_at').bind(w.id+':'+source,w.id,source,status,message,Date.now()).run();
-      if(env.JSEARCH_API_KEY){
-        try{const result=await searchIndexedJobs(w.company,w.role,env.JSEARCH_API_KEY);for(const job of result.jobs)watchCount+=await insertJob(w,job);for(const source of ['linkedin','indeed'])await record(source,'partial',`${result.jobs.length} matching indexed jobs overall · ${result.message}`);}
-        catch(e:any){for(const source of ['linkedin','indeed'])await record(source,'unavailable',e.message);}
-      }else for(const source of ['linkedin','indeed'])await record(source,'connection_required','Add a JSearch data connection');
-      for(const source of SOURCE_IDS){
-        try{const result=await scanSource(source,w.company,w.role);for(const job of result.jobs)watchCount+=await insertJob(w,job);await record(source,result.status,result.message);}
-        catch(e:any){await record(source,'unavailable',e.message);}
-      }
-      count+=watchCount;
       try {
-        if(!w.board) {
-          if(!env.BRAVE_SEARCH_API_KEY) {await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${watchCount} new jobs · see source status below`,w.id).run();continue;}
-          const discovered=await discoverJobs(w.company,w.role,env.BRAVE_SEARCH_API_KEY);let found=0;
-          for(const job of discovered.jobs)found+=await insertJob(w,job);count+=found;
-          await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${discovered.jobs.length} verified matches · ${found} new${discovered.failed?' · some pages unavailable':''}`,w.id).run();continue;
-        }
-        const b=parseBoard(w.board);const jobs=await boardJobs(b.provider,b.slug); let found=0;for(const j of jobs) found+=await insertJob(w,j);count+=found;
-        await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${jobs.filter((j:any)=>matches(j.title,w.role)).length} matching roles · ${found} new`,w.id).run();
-      } catch(e:any) { await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Check failed · '+e.message,w.id).run(); }
-    }await notifyNew(count); await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:count})); return {newJobs:count,message:`${count} new jobs. See source status for access or coverage limits.`};
+        if(!env.JSEARCH_API_KEY)throw new Error('Search connection needs setup');
+        const result=await searchIndexedJobs(w.company,w.role,env.JSEARCH_API_KEY);
+        for(const job of result.jobs)watchCount+=await insertJob(w,job);
+        count+=watchCount;
+        await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${watchCount} new jobs found`,w.id).run();
+        await db().prepare('INSERT INTO source_checks(id,watch_id,source,status,message,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,message=excluded.message,checked_at=excluded.checked_at').bind(w.id+':jsearch',w.id,'jsearch','ok',result.message,Date.now()).run();
+      } catch {failed++;await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Search could not finish. Please try again later.',w.id).run();}
+    }await notifyNew(count); await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:count,failed})); return {newJobs:count,failed,message:`${count} new jobs.${failed?' A search could not finish. Please try again later.':''}`};
   } finally { await setSetting(lockKey,'0'); }
 }
