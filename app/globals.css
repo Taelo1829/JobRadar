@@ -10,3 +10,5 @@
 .initial-search{display:flex;align-items:center;gap:12px;padding:16px;margin-bottom:18px;border-radius:10px;background:#f3edf9;color:#68517f}.initial-search b{font-size:13px}.initial-search p{margin:5px 0 0;font-size:12px;line-height:1.5}
 
 .watch-list{max-height:min(420px,55vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#b9aad8 transparent;padding-right:6px}.watch-list:focus-visible{outline:2px solid #9e8de6;outline-offset:3px;border-radius:5px}
+
+.application-followup{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}.mark-applied{display:inline-flex;align-items:center;gap:5px;color:#745abd;font-size:11px;text-decoration:underline;text-underline-offset:3px;padding:5px 0}

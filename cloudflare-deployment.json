@@ -2,7 +2,7 @@
   "account_id": "3799778c85e6a7d7223ccdd059456af2",
   "worker_name": "job-radar",
   "url": "https://job-radar.taelo-jobradar.workers.dev",
-  "deployed_version": "c793c90a-0165-46cd-b886-a8bfa042bc32",
+  "deployed_version": "cbca5e3f-0b52-453e-9ad6-0dc13e42795d",
   "database_id": "f93cbd1b-d7f5-4ecc-90f0-a2a0cc80c210",
   "database_name": "job-radar",
   "timezone": "Africa/Johannesburg",
