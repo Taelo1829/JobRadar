@@ -6,7 +6,7 @@ export async function GET() {
   if(!await getChatGPTUser())return Response.json({error:'Sign in to continue'},{status:401});
   const [w,j,s]=await Promise.all([db().prepare('SELECT * FROM watches ORDER BY company').all(),db().prepare(visibleJobsSql).bind(Date.now()-MATCH_WINDOW_MS,Date.now()-APPLIED_WINDOW_MS).all(),setting('schedule')]);
   const checks=await db().prepare("SELECT * FROM source_checks WHERE source IN ('jsearch','headcount')").all<any>();
-  return Response.json({watches:w.results.map((watch:any)=>({...watch,sourceChecks:checks.results.filter(c=>c.watch_id===watch.id)})),jobs:j.results,schedule:env.SCHEDULER_ENABLED==='true'?'active':'pending',searchConfigured:!!(env.JSEARCH_API_KEY||env.HEADCOUNT_API_KEY),indexedConfigured:!!env.JSEARCH_API_KEY,pushError:await setting('pushError')},{headers:{'Cache-Control':'no-store'}});
+  return Response.json({staleWatches:w.results.filter((w:any)=>w.stale_at!==null),watches:w.results.filter((w:any)=>w.stale_at===null).map((watch:any)=>({...watch,sourceChecks:checks.results.filter(c=>c.watch_id===watch.id)})),jobs:j.results,schedule:env.SCHEDULER_ENABLED==='true'?'active':'pending',searchConfigured:!!(env.JSEARCH_API_KEY||env.HEADCOUNT_API_KEY),indexedConfigured:!!env.JSEARCH_API_KEY,pushError:await setting('pushError')},{headers:{'Cache-Control':'no-store'}});
 }
 export async function POST(req:Request) {
   if(!await getChatGPTUser())return Response.json({error:'Sign in to continue'},{status:401});
@@ -16,10 +16,16 @@ export async function POST(req:Request) {
     if(b.action==='watch') {
       const company=String(b.company||'').trim(),role=String(b.role||'').trim();if(!company||!role||company.length>100||role.length>120)throw new Error('Enter a company and job role');if(b.board)throw new Error('Custom career boards are no longer supported');
       const exists=await db().prepare('SELECT id FROM watches WHERE lower(company)=lower(?) AND lower(role)=lower(?)').bind(company,role).first();if(exists)throw new Error('You are already tracking this company and role');
-      const n=await db().prepare('SELECT count(*) AS n FROM watches').first<any>();if(n.n>=20)throw new Error('You can track up to 20 searches');
-      const id=crypto.randomUUID();await db().prepare('INSERT INTO watches(id,company,role,board,message) VALUES(?,?,?,?,?)').bind(id,company,role,'','Checking for initial matches…').run();
+      const n=await db().prepare('SELECT count(*) AS n FROM watches WHERE stale_at IS NULL').first<any>();if(n.n>=20)throw new Error('You can track up to 20 searches');
+      const id=crypto.randomUUID();await db().prepare('INSERT INTO watches(id,company,role,board,message,tracking_since) VALUES(?,?,?,?,?,?)').bind(id,company,role,'','Checking for initial matches…',Date.now()).run();
       try {const initial=await scan(id);return Response.json({id,initial});}
       catch {return Response.json({id,initial:{newJobs:0,message:'Search saved. The first check could not finish; use Check now to retry. Future scheduled checks remain active.'}});}
+    }
+    if(b.action==='trackAgain') {
+      const n=await db().prepare('SELECT count(*) AS n FROM watches WHERE stale_at IS NULL').first<any>();if(n.n>=20)throw new Error('You can track up to 20 active searches');
+      const changed=await db().prepare('UPDATE watches SET stale_at=NULL,tracking_since=?,last_match_at=NULL,message=? WHERE id=? AND stale_at IS NOT NULL').bind(Date.now(),'Checking again',String(b.id)).run();
+      if(!changed.meta.changes)throw new Error('Stale search not found');
+      return Response.json({id:b.id,initial:await scan(b.id)});
     }
     if(b.action==='remove')await db().batch([db().prepare('DELETE FROM source_checks WHERE watch_id=?').bind(b.id),db().prepare('DELETE FROM watches WHERE id=?').bind(b.id)]);
     else if(b.action==='status') { if(!['new','applied','dismissed'].includes(b.status))throw new Error('Invalid status');await db().prepare('UPDATE jobs SET status=?,applied_at=? WHERE id=?').bind(b.status,b.status==='applied'?Date.now():null,b.id).run(); }

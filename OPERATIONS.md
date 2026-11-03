@@ -43,3 +43,5 @@ Posting dates come from JSearch posted datetime/timestamp or Headcount source_po
 Both providers request South African jobs and validate returned country fields before saving. JSearch must explicitly identify ZA/ZAF/South Africa. Headcount must include a known ZA location and must not select a posting explicitly located abroad. Unknown countries and global remote roles without confirmed South African eligibility are excluded.
 
 Unapplied matches disappear from the API and UI exactly seven days after found_at. Records remain stored for deduplication so repeated API results cannot re-add them or notify again. Applied jobs retain the separate 14-day applied_at window.
+
+Matches sort by posted_at descending, with missing dates last and discovery time as a tie-breaker. Searches pause into Stale after a successful empty check confirms 30 days since activation or the last matching result. Provider errors do not cause staleness. Existing searches start this window on migration. Track again resets the window and scans immediately.

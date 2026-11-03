@@ -46,7 +46,7 @@ export async function scan(onlyId?:string):Promise<{newJobs:number;message?:stri
   // Each watch gets a separate invocation so one large watchlist cannot exhaust
   // the Worker's per-invocation external-request allowance.
   if(!onlyId&&env.APP_ORIGIN&&env.APP_PASSWORD){
-    const watches=await db().prepare('SELECT id FROM watches').all<{id:string}>();let total=0,failed=0;
+    const watches=await db().prepare('SELECT id FROM watches WHERE stale_at IS NULL').all<{id:string}>();let total=0,failed=0;
     for(const w of watches.results)try{
       const r=await fetch(new URL('/api/run',env.APP_ORIGIN),{method:'POST',headers:{Authorization:'Basic '+btoa('owner:'+env.APP_PASSWORD),'Content-Type':'application/json'},body:JSON.stringify({watchId:w.id}),signal:AbortSignal.timeout(240000)});
       if(!r.ok){await r.body?.cancel();failed++;continue;}const result:any=await r.json();total+=result.newJobs||0;failed+=result.failed||0;
@@ -57,14 +57,15 @@ export async function scan(onlyId?:string):Promise<{newJobs:number;message?:stri
   const lock=await db().prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(settings.value AS INTEGER) < ?").bind(lockKey,String(Date.now()+600000),Date.now()).run();if(!lock.meta.changes)return {newJobs:0,message:'A check is already running'};
   let count=0,failed=0;
   try {
-    const watches=await db().prepare(onlyId?'SELECT * FROM watches WHERE id=?':'SELECT * FROM watches').bind(...(onlyId?[onlyId]:[])).all<any>();
+    const watches=await db().prepare(onlyId?'SELECT * FROM watches WHERE id=? AND stale_at IS NULL':'SELECT * FROM watches WHERE stale_at IS NULL').bind(...(onlyId?[onlyId]:[])).all<any>();
     for(const w of watches.results) {
       let watchCount=0;
       try {
         const result=await searchJobs(w.company,w.role,{jsearch:env.JSEARCH_API_KEY,headcount:env.HEADCOUNT_API_KEY},{get:()=>setting('jsearchPausedUntil'),set:value=>setSetting('jsearchPausedUntil',value)});
         for(const job of result.jobs)watchCount+=await insertJob(w,job);
         count+=watchCount;
-        await db().prepare('UPDATE watches SET last_check=?,message=? WHERE id=?').bind(Date.now(),`${watchCount} new jobs found`,w.id).run();
+        const now=Date.now();const stale=result.jobs.length===0&&now-(w.last_match_at||w.tracking_since)>=30*86400000;
+        await db().prepare('UPDATE watches SET last_check=?,message=?,last_match_at=?,stale_at=? WHERE id=?').bind(now,stale?'No matching jobs for 30 days':`${watchCount} new jobs found`,result.jobs.length?now:w.last_match_at,stale?now:null,w.id).run();
         await db().prepare('INSERT INTO source_checks(id,watch_id,source,status,message,checked_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,message=excluded.message,checked_at=excluded.checked_at').bind(w.id+':'+result.provider,w.id,result.provider,'ok',result.message,Date.now()).run();
       } catch {failed++;await db().prepare('UPDATE watches SET message=? WHERE id=?').bind('Search could not finish. Please try again later.',w.id).run();}
     }await notifyNew(count); await setSetting('lastRun',JSON.stringify({completedAt:Date.now(),newJobs:count,failed})); return {newJobs:count,failed,message:`${count} new jobs.${failed?' A search could not finish. Please try again later.':''}`};
